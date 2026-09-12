@@ -36,6 +36,16 @@ async function abrirFicha(page, characterUrl) {
   await page.waitForSelector('iframe');
 }
 
+// ATENCAO: os seletores abaixo (`.repeating_attack .attack` e
+// `.repeating_attack .repcontrol_add`), assim como os seletores de login em
+// fazerLogin, sao uma tentativa de melhor esforco (best-effort) baseada na
+// estrutura conhecida das secoes repetiveis da ficha "5th Edition OGL by
+// Roll20" — a Roll20 substitui/gera o markup das secoes repetiveis em tempo
+// de execucao, e as classes exatas usadas la nao puderam ser verificadas sem
+// uma conta Roll20 ativa. Nao foram "chutados" outros seletores para
+// substituir estes; se as armas nao aparecerem preenchidas na primeira
+// execucao real, inspecionar o DOM ao vivo da ficha (aba de armas, secao
+// repeating_attack) antes de mais nada.
 async function garantirLinhasDeArma(page, fichaFrame, quantidade) {
   const linhaLocator = fichaFrame.locator('.repeating_attack .attack');
   const atuais = await linhaLocator.count();
@@ -55,7 +65,15 @@ async function escreverCampo(fichaFrame, instrucao) {
 
   if ((await localizador.count()) === 0) {
     const local = instrucao.linhaArma !== undefined ? ` (arma ${instrucao.linhaArma + 1})` : '';
-    throw new Error(`campo attr_${instrucao.attr}${local} não encontrado no DOM da ficha`);
+    const CAMPOS_COM_TOGGLE = {
+      attr_equipment: 'Inventory',
+      attr_features_and_traits: 'FEATURES & TRAITS',
+    };
+    const toggle = CAMPOS_COM_TOGGLE[`attr_${instrucao.attr}`];
+    const dica = toggle
+      ? ` (verifique se a opcao "${toggle}" da ficha esta configurada como "Simple" — com "Compendium Compatible" esse campo nao existe no DOM)`
+      : '';
+    throw new Error(`campo attr_${instrucao.attr}${local} não encontrado no DOM da ficha${dica}`);
   }
 
   if (instrucao.tipo === 'text') {
@@ -83,11 +101,27 @@ async function atualizarFicha(config, instrucoes) {
     const fichaFrame = page.frameLocator('iframe').first();
 
     const linhasDeArmaNecessarias = 1 + Math.max(-1, ...instrucoes.map((i) => (i.linhaArma ?? -1)));
+    let criacaoDeLinhasFalhou = null;
     if (linhasDeArmaNecessarias > 0) {
-      await garantirLinhasDeArma(page, fichaFrame, linhasDeArmaNecessarias);
+      try {
+        await garantirLinhasDeArma(page, fichaFrame, linhasDeArmaNecessarias);
+      } catch (erro) {
+        // Falha ao criar linhas de repeating_attack nao pode abortar o resto
+        // da execucao: nenhuma falha de campo isolado tem permissao de zerar
+        // o relatorio inteiro. Marcamos todas as instrucoes de arma como
+        // puladas e seguimos com os demais campos normalmente.
+        criacaoDeLinhasFalhou = erro;
+      }
     }
 
     for (const instrucao of instrucoes) {
+      if (criacaoDeLinhasFalhou && instrucao.linhaArma !== undefined) {
+        pulados.push({
+          ...instrucao,
+          motivo: `nao foi possivel garantir as linhas de repeating_attack no Roll20: ${criacaoDeLinhasFalhou.message}`,
+        });
+        continue;
+      }
       try {
         await escreverCampo(fichaFrame, instrucao);
         escritos.push(instrucao);
