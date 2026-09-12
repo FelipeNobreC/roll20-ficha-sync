@@ -1,7 +1,5 @@
 const { chromium } = require('playwright');
 
-const CAMPOS_REPETIVEIS = new Set(['atkname', 'atkattr_base', 'atkprofflag', 'atkmod', 'dmgbase', 'dmgattr', 'dmgmod', 'dmgtype']);
-
 async function fazerLogin(page, config) {
   await page.goto('https://app.roll20.net/sessions/new', { waitUntil: 'domcontentloaded' });
 
