@@ -24,24 +24,33 @@ const MORTES = [
   ['Check Box 17', 'deathsave_fail3'],
 ];
 
+// ATENCAO: os nomes dos campos do AcroForm ("Check Box N") seguem a ordem
+// alfabetica em INGLES do template original da WotC, mas os rotulos IMPRESSOS
+// no PDF (localizado em PT-BR) foram reordenados para a ordem alfabetica em
+// PORTUGUES. Ou seja, o campo que aparece na posicao da pericia "Atletismo"
+// (5a pericia em ordem alfabetica PT) NAO se chama "Athletics" no PDF — ele
+// herdou o nome ingles que calhou de cair naquela posicao ("Arcana", 3a em
+// ordem alfabetica EN). Ver docs/roll20-5e-ogl-sheet-attrs.md para a tabela
+// completa e como isso foi verificado (cruzando com ProficienciesLang e os
+// modificadores de pericia do PDF de exemplo).
 const PERICIAS = [
   ['Check Box 23', 'acrobatics_prof'],
-  ['Check Box 24', 'animal_handling_prof'],
-  ['Check Box 25', 'arcana_prof'],
-  ['Check Box 26', 'athletics_prof'],
+  ['Check Box 24', 'arcana_prof'],
+  ['Check Box 25', 'athletics_prof'],
+  ['Check Box 26', 'performance_prof'],
   ['Check Box 27', 'deception_prof'],
-  ['Check Box 28', 'history_prof'],
-  ['Check Box 29', 'insight_prof'],
+  ['Check Box 28', 'stealth_prof'],
+  ['Check Box 29', 'history_prof'],
   ['Check Box 30', 'intimidation_prof'],
-  ['Check Box 31', 'investigation_prof'],
-  ['Check Box 32', 'medicine_prof'],
-  ['Check Box 33', 'nature_prof'],
-  ['Check Box 34', 'perception_prof'],
-  ['Check Box 35', 'performance_prof'],
-  ['Check Box 36', 'persuasion_prof'],
-  ['Check Box 37', 'religion_prof'],
+  ['Check Box 31', 'insight_prof'],
+  ['Check Box 32', 'investigation_prof'],
+  ['Check Box 33', 'animal_handling_prof'],
+  ['Check Box 34', 'medicine_prof'],
+  ['Check Box 35', 'nature_prof'],
+  ['Check Box 36', 'perception_prof'],
+  ['Check Box 37', 'persuasion_prof'],
   ['Check Box 38', 'sleight_of_hand_prof'],
-  ['Check Box 39', 'stealth_prof'],
+  ['Check Box 39', 'religion_prof'],
   ['Check Box 40', 'survival_prof'],
 ];
 
@@ -115,12 +124,22 @@ function buildMapping(pdfFields) {
     });
   }
 
+  // buildMapping nunca pode lancar excecao: ela e a base do --dry-run, que
+  // por sua vez e a rede de seguranca pensada pra sempre funcionar antes de
+  // tocar numa ficha de verdade. Se um bloco individual falhar por causa de
+  // um dado do PDF em formato inesperado (classe nao reconhecida, bonus de
+  // ataque ou dano em formato estranho), pulamos so aquele bloco/instrucao e
+  // seguimos com o resto do mapeamento normalmente.
   if (pdfFields['ClassLevel']) {
-    const { classePt, nivel, subclasse } = parseClassLevel(pdfFields['ClassLevel']);
-    instrucoes.push({ attr: 'class', tipo: 'select', valor: classeParaRoll20(classePt) });
-    instrucoes.push({ attr: 'base_level', tipo: 'text', valor: String(nivel) });
-    if (subclasse) {
-      instrucoes.push({ attr: 'subclass', tipo: 'text', valor: subclasse });
+    try {
+      const { classePt, nivel, subclasse } = parseClassLevel(pdfFields['ClassLevel']);
+      instrucoes.push({ attr: 'class', tipo: 'select', valor: classeParaRoll20(classePt) });
+      instrucoes.push({ attr: 'base_level', tipo: 'text', valor: String(nivel) });
+      if (subclasse) {
+        instrucoes.push({ attr: 'subclass', tipo: 'text', valor: subclasse });
+      }
+    } catch {
+      // Classe/nivel/subclasse em formato inesperado: pula so este bloco.
     }
   }
 
@@ -133,20 +152,28 @@ function buildMapping(pdfFields) {
     instrucoes.push({ attr: 'atkprofflag', tipo: 'checkbox', valor: false, linhaArma });
 
     if (pdfFields[arma.bonus]) {
-      instrucoes.push({
-        attr: 'atkmod',
-        tipo: 'text',
-        valor: String(parseBonusAtaque(pdfFields[arma.bonus])),
-        linhaArma,
-      });
+      try {
+        instrucoes.push({
+          attr: 'atkmod',
+          tipo: 'text',
+          valor: String(parseBonusAtaque(pdfFields[arma.bonus])),
+          linhaArma,
+        });
+      } catch {
+        // Bonus de ataque em formato inesperado: pula so o atkmod desta arma.
+      }
     }
 
     if (pdfFields[arma.dano]) {
-      const { dado, bonus, tipo } = parseDano(pdfFields[arma.dano]);
-      instrucoes.push({ attr: 'dmgbase', tipo: 'text', valor: dado, linhaArma });
-      instrucoes.push({ attr: 'dmgattr', tipo: 'select', valor: '0', linhaArma });
-      instrucoes.push({ attr: 'dmgmod', tipo: 'text', valor: String(bonus), linhaArma });
-      instrucoes.push({ attr: 'dmgtype', tipo: 'text', valor: tipo, linhaArma });
+      try {
+        const { dado, bonus, tipo } = parseDano(pdfFields[arma.dano]);
+        instrucoes.push({ attr: 'dmgbase', tipo: 'text', valor: dado, linhaArma });
+        instrucoes.push({ attr: 'dmgattr', tipo: 'select', valor: '0', linhaArma });
+        instrucoes.push({ attr: 'dmgmod', tipo: 'text', valor: String(bonus), linhaArma });
+        instrucoes.push({ attr: 'dmgtype', tipo: 'text', valor: tipo, linhaArma });
+      } catch {
+        // Dano em formato inesperado: pula so as 4 instrucoes de dano desta arma.
+      }
     }
   });
 

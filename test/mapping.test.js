@@ -45,6 +45,41 @@ test('mapeia as 3 armas do PDF de exemplo para linhas de repeating_attack', asyn
   assert.deepEqual(encontrar(instrucoes, 'atkname', 2), { attr: 'atkname', tipo: 'text', valor: 'Estaca', linhaArma: 2 });
 });
 
+test('mapeia proficiencia de pericia corrigindo o desalinhamento PT/EN do PDF', async () => {
+  const campos = await readPdfFields(FIXTURE);
+  const instrucoes = buildMapping(campos);
+
+  const esperadasVerdadeiras = [
+    'athletics_prof',
+    'history_prof',
+    'intimidation_prof',
+    'perception_prof',
+    'survival_prof',
+  ];
+  const esperadasFalsas = [
+    'acrobatics_prof',
+    'arcana_prof',
+    'performance_prof',
+    'deception_prof',
+    'stealth_prof',
+    'insight_prof',
+    'investigation_prof',
+    'animal_handling_prof',
+    'medicine_prof',
+    'nature_prof',
+    'persuasion_prof',
+    'sleight_of_hand_prof',
+    'religion_prof',
+  ];
+
+  for (const attr of esperadasVerdadeiras) {
+    assert.equal(encontrar(instrucoes, attr).valor, true, `${attr} deveria ser true`);
+  }
+  for (const attr of esperadasFalsas) {
+    assert.equal(encontrar(instrucoes, attr).valor, false, `${attr} deveria ser false`);
+  }
+});
+
 test('nao gera instrucoes de spellcasting', async () => {
   const campos = await readPdfFields(FIXTURE);
   const instrucoes = buildMapping(campos);

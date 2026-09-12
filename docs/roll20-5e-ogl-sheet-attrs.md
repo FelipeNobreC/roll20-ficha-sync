@@ -99,15 +99,87 @@ marcados como `true` nesse PDF):
   `20`=Inteligência, `21`=Sabedoria, `22`=Carisma.
 - Mortes (3 sucessos + 3 falhas): `Check Box 12,13,14`=sucesso 1/2/3,
   `15,16,17`=falha 1/2/3.
-- Perícias (ordem alfabética do PDF): `23`=Acrobatics, `24`=Animal
-  Handling, `25`=Arcana, `26`=Athletics, `27`=Deception, `28`=History,
-  `29`=Insight, `30`=Intimidation, `31`=Investigation, `32`=Medicine,
-  `33`=Nature, `34`=Perception, `35`=Performance, `36`=Persuasion,
-  `37`=Religion, `38`=Sleight of Hand, `39`=Stealth, `40`=Survival.
+- Perícias: **cuidado, isto não é "ordem alfabética do PDF" simples — foi
+  corrigido após uma revisão final ter pego um erro no mapeamento
+  original.** O template é o mesmo AcroForm em inglês da WotC, só que
+  localizado em PT-BR: os *nomes* dos campos (`Check Box N`) ficaram
+  na ordem alfabética ORIGINAL EM INGLÊS das 18 perícias, mas os
+  *rótulos impressos* na página foram reordenados para a ordem
+  alfabética em PORTUGUÊS. Ou seja, `Check Box 24` é o campo que, no
+  template em inglês, ficava na posição de "Animal Handling" — mas
+  como os rótulos foram re-triados para PT, essa posição na página
+  agora imprime "Arcanismo" (2ª pericia em ordem alfabética PT). O
+  nome do campo e a pericia que ele efetivamente marca **não são a
+  mesma coisa**: o campo é identificado pela sua *posição* (Nª em
+  ordem alfabética EN), e essa posição precisa ser reindexada contra
+  a ordem alfabética PT para achar a pericia certa.
+
+  Isto foi pego em revisão final, não assumido: o `Check Box 25`
+  (nomeado "Arcana" no AcroForm) está `true` no PDF de exemplo, mas o
+  modificador de pericia impresso ao lado é `+6` — impossível para
+  Arcana (INT+1 nesse personagem), e exatamente o valor esperado para
+  Atletismo (STR+4 com proficiência). Confirmado batendo com
+  `ProficienciesLang`: as únicas 5 perícias que o texto do PDF lista
+  como proficientes são Atletismo, História, Intimidação, Percepção e
+  Sobrevivência — e são exatamente as 5 que saem `true` com a tabela
+  corrigida abaixo.
+
+  Tabela corrigida (campo do PDF → pericia que ele realmente marca):
+
+  | Campo do PDF | Pericia (rótulo impresso) |
+  |---|---|
+  | `Check Box 23` (campo "Acrobatics") | Acrobacia |
+  | `Check Box 24` (campo "Animal Handling") | Arcanismo |
+  | `Check Box 25` (campo "Arcana") | Atletismo |
+  | `Check Box 26` (campo "Athletics") | Atuação |
+  | `Check Box 27` (campo "Deception") | Enganação |
+  | `Check Box 28` (campo "History") | Furtividade |
+  | `Check Box 29` (campo "Insight") | História |
+  | `Check Box 30` (campo "Intimidation") | Intimidação |
+  | `Check Box 31` (campo "Investigation") | Intuição |
+  | `Check Box 32` (campo "Medicine") | Investigação |
+  | `Check Box 33` (campo "Nature") | Lidar com Animais |
+  | `Check Box 34` (campo "Perception") | Medicina |
+  | `Check Box 35` (campo "Performance") | Natureza |
+  | `Check Box 36` (campo "Persuasion") | Percepção |
+  | `Check Box 37` (campo "Religion") | Persuasão |
+  | `Check Box 38` (campo "Sleight of Hand") | Prestidigitação |
+  | `Check Box 39` (campo "Stealth") | Religião |
+  | `Check Box 40` (campo "Survival") | Sobrevivência |
+
+  E o mapeamento correspondente pra `attr_*` do Roll20 (o que está de
+  fato em `src/mapping.js`):
+
+  ```js
+  const PERICIAS = [
+    ['Check Box 23', 'acrobatics_prof'],
+    ['Check Box 24', 'arcana_prof'],
+    ['Check Box 25', 'athletics_prof'],
+    ['Check Box 26', 'performance_prof'],
+    ['Check Box 27', 'deception_prof'],
+    ['Check Box 28', 'stealth_prof'],
+    ['Check Box 29', 'history_prof'],
+    ['Check Box 30', 'intimidation_prof'],
+    ['Check Box 31', 'insight_prof'],
+    ['Check Box 32', 'investigation_prof'],
+    ['Check Box 33', 'animal_handling_prof'],
+    ['Check Box 34', 'medicine_prof'],
+    ['Check Box 35', 'nature_prof'],
+    ['Check Box 36', 'perception_prof'],
+    ['Check Box 37', 'persuasion_prof'],
+    ['Check Box 38', 'sleight_of_hand_prof'],
+    ['Check Box 39', 'religion_prof'],
+    ['Check Box 40', 'survival_prof'],
+  ];
+  ```
 
 Esses números de checkbox são específicos da *versão* do template
 PDF (a mesma pra todas as fichas exportadas dele, incluindo os PDFs
 de nível 2 e nível 4 do usuário — os dois batem os mesmos IDs). Se o
 segundo jogador (fora do escopo do v1) usar um PDF de uma revisão
 diferente do template da WotC, esses números podem mudar e precisam
-ser reconferidos com o mesmo método (posição x/y por página).
+ser reconferidos com o mesmo método (posição x/y por página) — e,
+crucialmente, reconferindo também se aquela revisão sofre do mesmo
+desalinhamento nome-do-campo vs. rótulo-impresso descrito acima (não
+assumir que o nome do campo bate com a pericia impressa só porque
+"parece" o nome certo).
