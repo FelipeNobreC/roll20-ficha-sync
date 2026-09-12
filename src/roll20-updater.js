@@ -15,6 +15,16 @@ async function fazerLogin(page, config) {
   if (await erroLogin.count()) {
     throw new Error('Login falhou: e-mail ou senha incorretos (ou a Roll20 pediu verificacao extra).');
   }
+
+  const captcha = page.locator('iframe[src*="captcha" i], iframe[src*="turnstile" i], [class*="captcha" i], [class*="turnstile" i]');
+  if (await captcha.count()) {
+    throw new Error('Login falhou: a Roll20 apresentou um desafio de captcha (Cloudflare Turnstile ou similar) que precisa ser resolvido manualmente.');
+  }
+
+  const verificacao = page.locator('text=/verification|two-factor|2fa/i');
+  if (await verificacao.count()) {
+    throw new Error('Login falhou: a Roll20 pediu verificacao adicional (2FA/codigo de verificacao) que precisa ser resolvida manualmente.');
+  }
 }
 
 async function abrirFicha(page, characterUrl) {
@@ -26,13 +36,13 @@ async function abrirFicha(page, characterUrl) {
   await page.waitForSelector('iframe');
 }
 
-async function garantirLinhasDeArma(fichaFrame, quantidade) {
+async function garantirLinhasDeArma(page, fichaFrame, quantidade) {
   const linhaLocator = fichaFrame.locator('.repeating_attack .attack');
   const atuais = await linhaLocator.count();
   const botaoAdicionar = fichaFrame.locator('.repeating_attack').locator('.repcontrol_add').first();
   for (let i = atuais; i < quantidade; i++) {
     await botaoAdicionar.click();
-    await fichaFrame.waitForTimeout(300); // Roll20 injeta a linha nova de forma assincrona
+    await page.waitForTimeout(300); // Roll20 injeta a linha nova de forma assincrona
   }
 }
 
@@ -44,7 +54,8 @@ async function escreverCampo(fichaFrame, instrucao) {
       : fichaFrame.locator(seletor).first();
 
   if ((await localizador.count()) === 0) {
-    throw new Error('campo não encontrado no DOM da ficha');
+    const local = instrucao.linhaArma !== undefined ? ` (arma ${instrucao.linhaArma + 1})` : '';
+    throw new Error(`campo attr_${instrucao.attr}${local} não encontrado no DOM da ficha`);
   }
 
   if (instrucao.tipo === 'text') {
@@ -73,7 +84,7 @@ async function atualizarFicha(config, instrucoes) {
 
     const linhasDeArmaNecessarias = 1 + Math.max(-1, ...instrucoes.map((i) => (i.linhaArma ?? -1)));
     if (linhasDeArmaNecessarias > 0) {
-      await garantirLinhasDeArma(fichaFrame, linhasDeArmaNecessarias);
+      await garantirLinhasDeArma(page, fichaFrame, linhasDeArmaNecessarias);
     }
 
     for (const instrucao of instrucoes) {
