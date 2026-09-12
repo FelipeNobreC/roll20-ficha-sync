@@ -9,10 +9,10 @@ const FIXTURE = path.join(__dirname, 'fixtures', 'ficha-exemplo.pdf');
 
 test('--dry-run imprime o mapeamento sem tentar abrir navegador', () => {
   const saida = execFileSync('node', [CLI, FIXTURE, '--dry-run'], { encoding: 'utf8' });
-  assert.match(saida, /attr_character_name -> "Vau"/);
-  assert.match(saida, /attr_class -> "Fighter"/);
-  assert.match(saida, /attr_strength -> "18"/);
-  assert.match(saida, /attr_atkname \(arma 1\) -> "Espada longa"/);
+  assert.match(saida, /attr_character_name \[text\] -> "Vau"/);
+  assert.match(saida, /attr_class \[select\] -> "Fighter"/);
+  assert.match(saida, /attr_strength \[text\] -> "18"/);
+  assert.match(saida, /attr_atkname \(arma 1\) \[text\] -> "Espada longa"/);
 });
 
 test('reclama de forma clara quando o PDF nao existe', () => {

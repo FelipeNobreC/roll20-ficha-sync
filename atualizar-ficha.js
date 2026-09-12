@@ -28,7 +28,7 @@ function imprimirInstrucoes(instrucoes) {
   console.log('attrRoll20 -> valor (dry-run, nenhum navegador foi aberto)');
   for (const instrucao of instrucoes) {
     const linha = instrucao.linhaArma !== undefined ? ` (arma ${instrucao.linhaArma + 1})` : '';
-    console.log(`  attr_${instrucao.attr}${linha} -> ${JSON.stringify(instrucao.valor)}`);
+    console.log(`  attr_${instrucao.attr}${linha} [${instrucao.tipo}] -> ${JSON.stringify(instrucao.valor)}`);
   }
 }
 

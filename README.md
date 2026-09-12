@@ -11,6 +11,8 @@ npm install
 npx playwright install chromium
 cp config.example.json config.json
 # edite config.json com seu email, senha e a URL do personagem
+# (o comando "cp" acima e Unix/Git Bash; no cmd.exe do Windows, que nao e o
+# PowerShell, use "copy config.example.json config.json" no lugar)
 
 # revise o mapeamento antes de tocar na ficha de verdade:
 node atualizar-ficha.js caminho/ficha.pdf --dry-run
