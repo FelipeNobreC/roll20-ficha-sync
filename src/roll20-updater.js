@@ -89,7 +89,10 @@ async function escreverCampo(fichaFrame, instrucao) {
 }
 
 async function atualizarFicha(config, instrucoes) {
-  const browser = await chromium.launch({ headless: false });
+  // Usa o Google Chrome ja instalado na maquina em vez da build propria do
+  // Chromium que o Playwright baixaria — evita precisar rodar
+  // `npx playwright install chromium` e o download de ~150MB que isso exige.
+  const browser = await chromium.launch({ headless: false, channel: 'chrome' });
   const escritos = [];
   const pulados = [];
 

@@ -8,7 +8,6 @@ Wizards of the Coast.
 
 ```bash
 npm install
-npx playwright install chromium
 cp config.example.json config.json
 # edite config.json com seu email, senha e a URL do personagem
 # (o comando "cp" acima e Unix/Git Bash; no cmd.exe do Windows, que nao e o
@@ -20,6 +19,13 @@ node atualizar-ficha.js caminho/ficha.pdf --dry-run
 # depois de revisar, aplique de verdade:
 node atualizar-ficha.js caminho/ficha.pdf --config config.json
 ```
+
+O script usa o Google Chrome já instalado na sua máquina (via
+`channel: 'chrome'` do Playwright) em vez de baixar a build própria do
+Chromium — não precisa rodar `npx playwright install`. Se você não tiver
+o Chrome instalado, instale-o primeiro (ou troque o `channel` em
+`src/roll20-updater.js` por `npx playwright install chromium` e remova a
+opção `channel`).
 
 ## Antes de rodar sem --dry-run
 
