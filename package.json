@@ -5,7 +5,7 @@
   "description": "Sincroniza uma ficha de D&D 5e em PDF preenchivel com uma ficha existente no Roll20 via automacao de navegador.",
   "main": "atualizar-ficha.js",
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",
