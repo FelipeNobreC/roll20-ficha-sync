@@ -15,7 +15,12 @@ function notificarConclusao(mensagem) {
   const script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('${mensagemEscapada}', 'roll20-ficha-sync') | Out-Null`;
 
   try {
-    const processo = spawn('powershell.exe', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', script], {
+    // Testado ao vivo: "-WindowStyle Hidden" esconde a caixa de dialogo
+    // JUNTO com o console do powershell (nao so o console) — sem efeito
+    // nenhum aparece na tela. Sem essa opcao, o console pisca por uma
+    // fracao de segundo antes do popup, mas o popup em si aparece
+    // normalmente, que e o que importa aqui.
+    const processo = spawn('powershell.exe', ['-NoProfile', '-Command', script], {
       detached: true,
       stdio: 'ignore',
     });
