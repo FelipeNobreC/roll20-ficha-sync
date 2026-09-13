@@ -235,3 +235,94 @@ crucialmente, reconferindo também se aquela revisão sofre do mesmo
 desalinhamento nome-do-campo vs. rótulo-impresso descrito acima (não
 assumir que o nome do campo bate com a pericia impressa só porque
 "parece" o nome certo).
+
+## Descobertas adicionais (segunda rodada de testes ao vivo)
+
+Depois do primeiro conjunto de correções (ver commit anterior), o
+usuário testou a sincronização de verdade e apontou que
+`equipment`/`features_and_traits`/`other_proficiencies_and_languages`
+continuavam vazios, além de CA nunca ter sido mapeado. Investigação
+ao vivo revelou mais três descobertas importantes:
+
+- **O modo "Simple" agora é automatizado pelo próprio script.** Os
+  três selects (`attr_simpleinventory`, `attr_simpletraits`,
+  `attr_simpleproficencies`) ficam na aba "engrenagem" (`input[name="attr_tab"][value="options"]`)
+  da própria ficha. `roll20-updater.js` troca os três para `"simple"`
+  automaticamente no início de cada execução (`garantirModoSimples`),
+  então o usuário não precisa mais fazer isso manualmente. Achado
+  importante: `locator.selectOption()` do Playwright às vezes não
+  "gruda" o valor nesses selects — setar `.value` direto via
+  `evaluate` e disparar um evento `change` manualmente é o jeito que
+  se mostrou confiável.
+- **`attr_ac` (Classe de Armadura) é um `<input type="text">` normal e
+  editável** nesta versão da ficha (não mais um campo calculado como
+  no HTML estático original pesquisado) — foi adicionado à tabela de
+  campos diretos em `mapping.js`.
+- **Vários checkboxes desta ficha travam o `locator.setChecked()` do
+  Playwright** com o erro "elemento X intercepta eventos de ponteiro"
+  — um elemento vizinho (às vezes até `<html>` inteiro) fica na frente
+  do checkbox na posição exata do clique, mesmo o checkbox estando
+  visível/habilitado. A correção foi trocar para ler/alternar o estado
+  direto via JavaScript (`el.checked` + `el.click()` via `evaluate`),
+  igual à técnica já usada pras abas — evita completamente a detecção
+  de sobreposição do Playwright.
+
+## A seção de armas tem um bug de contaminação cruzada (corrigido)
+
+A correção original de armas (buscar a linha por índice posicional,
+`nth(i)`) tinha um problema sério descoberto só depois de rodar a
+sincronização de ponta a ponta várias vezes: **a ordem das linhas
+dentro do `.repcontainer[data-groupname="repeating_attack"]` não é
+estável** — ela pode mudar sozinha entre uma escrita de campo e
+outra, mesmo dentro da mesma execução. O resultado prático: o dano de
+uma arma acabava sendo escrito na linha de outra arma (ex.: "Espada
+longa" ficou com o dado de dano da "Estaca").
+
+A correção (`localizarLinhaDaArma` em `roll20-updater.js`) troca a
+estratégia: em vez de confiar no índice, cada instrução de arma carrega
+consigo o `nomeArma` (adicionado em `mapping.js`), e o updater procura,
+a cada campo, qual linha tem esse nome escrito *no momento*. O índice
+posicional (`linhaArma`) só é usado como último recurso, pro primeiro
+campo (`atkname`) de uma linha nova que ainda não tem nome nenhum
+escrito. Isso elimina a contaminação cruzada mesmo que a lista
+reordene no meio da execução.
+
+Outra causa de perda de dados encontrada: **uma linha nova (criada
+pelo botão "+Add") que fica sem nenhum campo preenchido não persiste
+se a página recarregar antes disso** — a Roll20 parece descartar
+linhas repetitivas totalmente vazias. Isso só importa se alguém for
+mexer manualmente nesse fluxo passo a passo (como foi feito durante o
+debug); o script em si sempre adiciona e preenche a linha na mesma
+sessão de página, sem recarregar no meio.
+
+Por fim: **o autosave da seção de armas às vezes não persiste um
+campo enquanto a linha continua aberta em modo edição** — a leitura
+imediata depois do `fill()` confirma o valor certo, mas um reload da
+página mostra o valor antigo. Recolher a linha de volta (reclicar o
+checkbox `attr_options-flag` daquela linha) antes de fechar a página
+resolveu isso de forma consistente nos testes. `atualizarFicha` agora
+faz isso automaticamente pra toda linha de arma no final da execução.
+
+## Atributos de habilidade (Força, Destreza, etc.) — limitação conhecida, não corrigida
+
+`attr_strength` (e as outras 5 habilidades) não são mais o campo
+editável direto nesta versão da ficha. A estrutura real é:
+
+```html
+<input type="text" name="attr_strength_base" value="10">  <!-- valor BASE, antes de bonus racial -->
+<input type="hidden" name="attr_strength" value="18">      <!-- valor FINAL, calculado pela propria ficha -->
+<span class="finalattr" name="attr_strength">18</span>      <!-- so exibicao -->
+```
+
+O PDF de origem traz o valor **final** (já com bônus racial somado,
+ex. `STR = 18` pro Menir com +2 de Força). Escrever esse valor direto
+em `attr_strength_base` faria a ficha somar o bônus racial de novo
+(rodando pra um valor final errado, maior que o do PDF). Escrever
+direto em `attr_strength` (que é `type="hidden"`) exigiria forçar o
+valor via JavaScript, contornando o cálculo da própria ficha — modo
+que nenhuma outra correção deste documento usa dessa forma. Resolver
+isso direito exigiria descobrir o bônus racial (que não está
+estruturado em nenhum campo do PDF, só em texto livre) pra
+back-calcular o valor "base" certo — decisão de design maior, fora do
+escopo de um ajuste de seletor, e por isso deixada como limitação
+conhecida em vez de arriscar escrever um valor errado.
