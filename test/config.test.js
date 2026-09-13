@@ -15,12 +15,9 @@ function escreverConfigTemp(conteudo) {
 
 test('carrega um config.json valido', () => {
   const caminho = escreverConfigTemp({
-    email: 'a@b.com',
-    password: 'segredo',
     characterUrl: 'https://app.roll20.net/campaigns/characters/123',
   });
   const config = loadConfig(caminho);
-  assert.equal(config.email, 'a@b.com');
   assert.equal(config.characterUrl, 'https://app.roll20.net/campaigns/characters/123');
 });
 
@@ -29,6 +26,6 @@ test('rejeita arquivo inexistente', () => {
 });
 
 test('rejeita config sem characterUrl', () => {
-  const caminho = escreverConfigTemp({ email: 'a@b.com', password: 'segredo' });
+  const caminho = escreverConfigTemp({});
   assert.throws(() => loadConfig(caminho), /characterUrl/);
 });

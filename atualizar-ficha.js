@@ -32,6 +32,8 @@ function imprimirInstrucoes(instrucoes) {
   }
 }
 
+let emSincronizacaoReal = false;
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const pdfFields = await readPdfFields(args.pdf);
@@ -42,9 +44,14 @@ async function main() {
     return;
   }
 
+  // So a partir daqui um erro justifica popup — antes disso e so uso
+  // errado do CLI (caminho de PDF errado, etc.), sem navegador aberto.
+  emSincronizacaoReal = true;
+
   // Import tardio: so carrega o Playwright quando de fato vai abrir o navegador.
   const { loadConfig } = require('./src/config');
   const { atualizarFicha } = require('./src/roll20-updater');
+  const { notificarConclusao } = require('./src/notificar');
 
   const config = loadConfig(path.resolve(args.config));
   const inicio = Date.now();
@@ -60,9 +67,20 @@ async function main() {
   for (const pulado of relatorio.pulados) {
     console.log(`  - attr_${pulado.attr}${pulado.linhaArma !== undefined ? ` (arma ${pulado.linhaArma + 1})` : ''}: ${pulado.motivo}`);
   }
+
+  notificarConclusao(
+    `Sincronizacao concluida em ${duracaoSegundos}s.\n${relatorio.escritos.length} campos escritos, ${relatorio.pulados.length} pulados.`
+  );
 }
 
 main().catch((erro) => {
   console.error('Erro:', erro.message);
+  if (emSincronizacaoReal) {
+    try {
+      require('./src/notificar').notificarConclusao(`Erro na sincronizacao: ${erro.message}`);
+    } catch {
+      // notificacao e so uma conveniencia
+    }
+  }
   process.exit(1);
 });

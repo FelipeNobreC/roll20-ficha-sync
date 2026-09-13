@@ -7,10 +7,11 @@ function loadConfig(caminho) {
     );
   }
   const config = JSON.parse(fs.readFileSync(caminho, 'utf8'));
-  for (const campo of ['email', 'password', 'characterUrl']) {
-    if (!config[campo]) {
-      throw new Error(`Config inválida: campo "${campo}" ausente em ${caminho}`);
-    }
+  // email/password nao sao mais exigidos: o login na Roll20 e sempre
+  // manual (a Cloudflare bloqueia login automatizado), entao o script
+  // nunca le essas credenciais.
+  if (!config.characterUrl) {
+    throw new Error(`Config inválida: campo "characterUrl" ausente em ${caminho}`);
   }
   return config;
 }

@@ -6,7 +6,49 @@ const fs = require('node:fs');
 
 const CHROME_DEBUG_PORT = 9222;
 const CHROME_PROFILE_DIR = path.join(os.homedir(), '.roll20-ficha-sync', 'chrome-profile');
-const CHROME_PATH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+
+// Procura o Chrome (preferido) ou o Edge (fallback — vem instalado por
+// padrao no Windows, entao um amigo sem Chrome ainda consegue rodar) nos
+// locais mais comuns de cada sistema operacional. Precisa do caminho do
+// executavel de verdade (nao da pra usar so `channel: 'chrome'` do
+// Playwright aqui) porque o navegador e lancado por fora do Playwright via
+// `child_process.spawn`, pra nao herdar a flag --enable-automation que faz
+// a Cloudflare bloquear o login (ver comentario em conectarChrome).
+function localizarNavegador() {
+  const pf = process.env['PROGRAMFILES'] || 'C:/Program Files';
+  const pfx86 = process.env['PROGRAMFILES(X86)'] || 'C:/Program Files (x86)';
+  const localAppData = process.env['LOCALAPPDATA'] || '';
+
+  const candidatos = [
+    // Windows - Chrome
+    path.join(pf, 'Google/Chrome/Application/chrome.exe'),
+    path.join(pfx86, 'Google/Chrome/Application/chrome.exe'),
+    localAppData && path.join(localAppData, 'Google/Chrome/Application/chrome.exe'),
+    // Windows - Edge (vem instalado por padrao no Windows 10/11)
+    path.join(pfx86, 'Microsoft/Edge/Application/msedge.exe'),
+    path.join(pf, 'Microsoft/Edge/Application/msedge.exe'),
+    // macOS
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    // Linux
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/opt/google/chrome/chrome',
+    '/usr/bin/microsoft-edge',
+    '/usr/bin/microsoft-edge-stable',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+  ].filter(Boolean);
+
+  const encontrado = candidatos.find((caminho) => fs.existsSync(caminho));
+  if (!encontrado) {
+    throw new Error(
+      'Nao foi possivel encontrar o Google Chrome ou o Microsoft Edge instalado nesta maquina. ' +
+        'Instale um dos dois, ou edite a lista de caminhos em localizarNavegador() (src/roll20-updater.js).'
+    );
+  }
+  return encontrado;
+}
 
 // Testado ao vivo: app.roll20.net fica atras de um desafio Cloudflare
 // ("Executando verificacao de seguranca") que trava a pagina ANTES do
@@ -29,7 +71,7 @@ async function conectarChrome() {
 
   fs.mkdirSync(CHROME_PROFILE_DIR, { recursive: true });
   const chrome = spawn(
-    CHROME_PATH,
+    localizarNavegador(),
     [
       `--remote-debugging-port=${CHROME_DEBUG_PORT}`,
       `--user-data-dir=${CHROME_PROFILE_DIR}`,
