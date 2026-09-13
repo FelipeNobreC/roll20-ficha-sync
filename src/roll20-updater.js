@@ -84,26 +84,177 @@ async function abrirFicha(page, characterUrl) {
   return fichaFrame;
 }
 
-// CONFIRMADO AO VIVO QUE ESTA FUNCAO NAO FUNCIONA na ficha redesenhada
-// atual: `.repeating_attack .attack` e `.repeating_attack .repcontrol_add`
-// nao existem mais no DOM real (0 matches, sempre da timeout). A estrutura
-// real observada e `.repcontainer[data-groupname="attack"] > .repitem >
-// .attack`, com o botao de adicionar em outro lugar (nao localizado ainda).
-// Alem disso o campo attr_atkname visivel por padrao e um <span> de
-// "modo exibicao" dentro de um <button>, nao o <input> editavel — a linha
-// so fica editavel apos expandir (mecanismo nao mapeado). Ate isso ser
-// resolvido, escrever armas sempre vai falhar aqui — o erro cai
-// corretamente em `pulados` (nenhum campo de arma trava o resto da
-// sincronizacao), mas nao escreve nada. Retomar a partir da cadeia de pais
-// documentada: SPAN > BUTTON.btn > DIV.display > DIV.attack > DIV.repitem
-// > DIV.repcontainer.ui-sortable.
+// attr_equipment, attr_features_and_traits e attr_other_proficiencies_and_
+// languages so existem no DOM quando a ficha esta configurada no modo
+// "Simple" (em vez do padrao "Compendium Compatible", que usa secoes
+// repetiveis estruturadas em vez de um campo de texto livre). Esses 3
+// selects ficam na aba "options" (engrenagem) da propria ficha. Testado ao
+// vivo: `locator.selectOption()` do Playwright as vezes nao gruda o valor
+// (o campo volta pro valor antigo sozinho) — setar o `.value` e disparar
+// um evento "change" manualmente e o jeito que se mostrou confiavel.
+const CAMPOS_MODO_SIMPLES = ['attr_simpleinventory', 'attr_simpletraits', 'attr_simpleproficencies'];
+
+async function garantirModoSimples(page, fichaFrame) {
+  await fichaFrame.locator('input[name="attr_tab"][value="options"]').first().evaluate((el) => el.click());
+  await page.waitForTimeout(500);
+
+  for (const nome of CAMPOS_MODO_SIMPLES) {
+    const select = fichaFrame.locator(`select[name="${nome}"]`).first();
+    const valorAtual = await select.inputValue();
+    if (valorAtual !== 'simple') {
+      await select.evaluate((el) => {
+        el.value = 'simple';
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await page.waitForTimeout(500);
+    }
+  }
+
+  await fichaFrame.locator('input[name="attr_tab"][value="core"]').first().evaluate((el) => el.click());
+  await page.waitForTimeout(500);
+}
+
+// Testado ao vivo: `.repeating_attack .attack` e `.repeating_attack
+// .repcontrol_add` (do HTML estatico pesquisado) nao existem no DOM real —
+// a Roll20 gera a secao repetivel em runtime como
+// `.repcontainer[data-groupname="repeating_attack"]` (ha ate 3 copias na
+// pagina, so uma visivel) com as linhas em `.repitem` dentro dela, e o
+// botao de adicionar num `.repcontrol` IRMAO do repcontainer (nao filho):
+// `<div class="repcontrol" data-groupname="repeating_attack">
+//    <button class="repcontrol_edit">Modify</button>
+//    <button class="repcontrol_add">+Add</button></div>`
+const SELETOR_REPCONTAINER_ARMA = '.repcontainer[data-groupname="repeating_attack"]:visible';
+
+// Testado ao vivo: logo depois que `attr_character_name` fica visivel (o
+// sinal que `abrirFicha` usa pra saber que a ficha "carregou"), a secao de
+// armas ainda pode estar com ZERO linhas — os dados das linhas existentes
+// (vindos do servidor) chegam de forma assincrona e mais devagar que o
+// resto da ficha. Contar as linhas nesse momento da uma contagem errada
+// (baixa demais), o que desalinha toda a logica de "quantas linhas faltam
+// adicionar" e de indice de linha pra cada arma. Espera a contagem parar
+// de mudar por duas leituras seguidas antes de confiar nela.
+async function esperarLinhasDeArmaEstabilizar(fichaFrame) {
+  const linhaLocator = fichaFrame.locator(SELETOR_REPCONTAINER_ARMA).locator('.repitem');
+  let anterior = -1;
+  for (let tentativa = 0; tentativa < 20; tentativa++) {
+    const atual = await linhaLocator.count();
+    if (atual === anterior) return atual;
+    anterior = atual;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return anterior;
+}
+
 async function garantirLinhasDeArma(page, fichaFrame, quantidade) {
-  const linhaLocator = fichaFrame.locator('.repeating_attack .attack');
-  const atuais = await linhaLocator.count();
-  const botaoAdicionar = fichaFrame.locator('.repeating_attack').locator('.repcontrol_add').first();
+  const linhaLocator = fichaFrame.locator(SELETOR_REPCONTAINER_ARMA).locator('.repitem');
+  const atuais = await esperarLinhasDeArmaEstabilizar(fichaFrame);
+  const botaoAdicionar = fichaFrame.locator(`${SELETOR_REPCONTAINER_ARMA} + .repcontrol .repcontrol_add`);
   for (let i = atuais; i < quantidade; i++) {
-    await botaoAdicionar.click();
-    await page.waitForTimeout(300); // Roll20 injeta a linha nova de forma assincrona
+    await botaoAdicionar.evaluate((el) => el.click());
+    // Testado ao vivo: 300ms fixo nao bastava pra linha nova terminar de
+    // montar (o checkbox attr_options-flag dela demorava mais que isso pra
+    // aparecer, o que travava tudo depois em timeout). Espera o proprio
+    // checkbox da nova linha existir antes de seguir.
+    await linhaLocator.nth(i).locator('input[name="attr_options-flag"]').first().waitFor({ timeout: 10000 });
+    await page.waitForTimeout(300);
+  }
+}
+
+// Testado ao vivo: a ordem das linhas dentro de `.repcontainer` NAO e
+// estavel durante uma execucao — a secao repetitiva pode reordenar
+// sozinha entre uma escrita de campo e outra. Confiar so no indice
+// posicional (linhaArma) fez campos de armas diferentes se misturarem
+// (o dano de uma arma foi escrito na linha de outra). Localizar a linha
+// pelo NOME atual da arma (attr_atkname) e muito mais confiavel; o indice
+// so serve de ultimo recurso, para o primeiro campo (atkname) de uma
+// arma que ainda nao tem nome nenhum escrito (linha nova, recem-criada).
+async function localizarLinhaDaArma(fichaFrame, instrucao) {
+  const linhas = fichaFrame.locator(SELETOR_REPCONTAINER_ARMA).locator('.repitem');
+  const total = await linhas.count();
+  const alvo = instrucao.nomeArma.trim().toLowerCase();
+  for (let i = 0; i < total; i++) {
+    const nomeAtual = await linhas
+      .nth(i)
+      .locator('[name="attr_atkname"]')
+      .first()
+      .evaluate((el) => (el.value !== undefined ? el.value : el.textContent))
+      .catch(() => '');
+    if (String(nomeAtual).trim().toLowerCase() === alvo) {
+      return linhas.nth(i);
+    }
+  }
+  return linhas.nth(instrucao.linhaArma);
+}
+
+// Cada linha de arma renderiza por padrao em "modo exibicao" (um <span
+// name="attr_atkname"> dentro de um botao de rolar, nao um <input>) e so
+// fica editavel depois de clicar no checkbox `attr_options-flag` daquela
+// linha especifica (o mesmo name se repete em toda linha — tem que ser
+// escopado dentro do `.repitem` certo, nunca `:first()` da pagina toda).
+// Testado ao vivo: a relacao entre o estado "checked" desse checkbox e
+// qual dos dois modos (span/input) fica visivel NAO e um toggle previsivel
+// — em execucoes diferentes, tanto marcar quanto desmarcar revelou o
+// <input>. Em vez de tentar adivinhar a direcao certa a partir do
+// `checked` atual, verifica o RESULTADO de verdade (attr_atkname virou
+// <input>?) depois de cada clique, e clica de novo se ainda nao virou —
+// no maximo 2 cliques (as duas direcoes possiveis do toggle).
+async function garantirLinhaArmaEditavel(repitem) {
+  const nomeCampo = repitem.locator('[name="attr_atkname"]:visible').first();
+  const flag = repitem.locator('input[name="attr_options-flag"]').first();
+
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const tag = await nomeCampo.evaluate((el) => el.tagName).catch(() => null);
+    if (tag === 'INPUT') return;
+    await flag.evaluate((el) => el.click());
+    await new Promise((resolve) => setTimeout(resolve, 800));
+  }
+}
+
+// Testado ao vivo: varios campos so aparecem no DOM depois de uma
+// interacao especifica na ficha:
+// - age/height/weight/eyes/skin/hair/allies_and_organizations/
+//   character_backstory/treasure ficam atras da aba interna "BIO" da
+//   propria ficha (radio <input name="attr_tab" value="bio">, diferente
+//   do link externo "Biografia e informacoes" do Roll20, que abre um
+//   modal completamente à parte, sem relacao com esses campos).
+// - background/alignment/experience ficam num painel "display" que so
+//   aparece quando o checkbox <input name="attr_options-class-selection">
+//   esta DESMARCADO — quando marcado (padrao), o painel "options" mostra
+//   os campos de classe/subclasse/nivel no lugar, escondendo esses.
+// Clicar via `.evaluate(el => el.click())` diretamente no elemento real
+// (radio/checkbox), nao no <span> visual ao lado — cliques do Playwright
+// no <span> sao interceptados por outro elemento sobreposto (framework
+// Vue por baixo) e nao mudam o estado.
+const ABA_POR_CAMPO = {
+  age: 'bio',
+  height: 'bio',
+  weight: 'bio',
+  eyes: 'bio',
+  skin: 'bio',
+  hair: 'bio',
+  allies_and_organizations: 'bio',
+  character_backstory: 'bio',
+  treasure: 'bio',
+};
+const CAMPOS_QUE_PRECISAM_OPTIONS_CLASSE_DESMARCADO = new Set(['background', 'alignment', 'experience']);
+
+async function ajustarEstadoDaFicha(page, fichaFrame, estadoAtual, instrucao) {
+  const abaNecessaria = ABA_POR_CAMPO[instrucao.attr] || 'core';
+  if (estadoAtual.aba !== abaNecessaria) {
+    await fichaFrame.locator(`input[name="attr_tab"][value="${abaNecessaria}"]`).first().evaluate((el) => el.click());
+    estadoAtual.aba = abaNecessaria;
+    await page.waitForTimeout(500);
+  }
+
+  const precisaDesmarcado = CAMPOS_QUE_PRECISAM_OPTIONS_CLASSE_DESMARCADO.has(instrucao.attr);
+  const marcadoNecessario = !precisaDesmarcado;
+  if (estadoAtual.optionsClasseMarcado !== marcadoNecessario) {
+    await fichaFrame
+      .locator('input[name="attr_options-class-selection"]:visible')
+      .first()
+      .evaluate((el) => el.click());
+    estadoAtual.optionsClasseMarcado = marcadoNecessario;
+    await page.waitForTimeout(500);
   }
 }
 
@@ -112,11 +263,14 @@ async function escreverCampo(fichaFrame, instrucao) {
   // abrirFicha) — sem isso o Playwright pode escrever numa copia da ficha
   // que nao esta sendo mostrada (ou, pior, num <span> de exibicao em vez
   // do <input> editavel de verdade).
+  let linhaDaArma = null;
+  if (instrucao.linhaArma !== undefined) {
+    linhaDaArma = await localizarLinhaDaArma(fichaFrame, instrucao);
+    await garantirLinhaArmaEditavel(linhaDaArma);
+  }
+
   const seletor = `[name="attr_${instrucao.attr}"]:visible`;
-  const localizador =
-    instrucao.linhaArma !== undefined
-      ? fichaFrame.locator('.repeating_attack .attack').nth(instrucao.linhaArma).locator(seletor)
-      : fichaFrame.locator(seletor).first();
+  const localizador = linhaDaArma ? linhaDaArma.locator(seletor).first() : fichaFrame.locator(seletor).first();
 
   if ((await localizador.count()) === 0) {
     const local = instrucao.linhaArma !== undefined ? ` (arma ${instrucao.linhaArma + 1})` : '';
@@ -135,7 +289,17 @@ async function escreverCampo(fichaFrame, instrucao) {
     await localizador.fill(String(instrucao.valor));
     await localizador.blur(); // Roll20 só salva com autosave no blur
   } else if (instrucao.tipo === 'checkbox') {
-    await localizador.setChecked(Boolean(instrucao.valor));
+    // Testado ao vivo: localizador.setChecked() usa clique com deteccao de
+    // sobreposicao do Playwright, que trava em varios checkboxes desta
+    // ficha (um elemento vizinho "intercepta" o clique na posicao exata,
+    // mesmo o alvo estando visivel/habilitado) — mesma familia de problema
+    // ja visto nas abas. Ler/alternar o estado direto via JS, sem passar
+    // pela deteccao de clique do Playwright, evita isso.
+    const valorAlvo = Boolean(instrucao.valor);
+    const marcadoAtual = await localizador.evaluate((el) => el.checked);
+    if (marcadoAtual !== valorAlvo) {
+      await localizador.evaluate((el) => el.click());
+    }
   } else if (instrucao.tipo === 'select') {
     await localizador.selectOption({ value: String(instrucao.valor) });
   } else {
@@ -162,6 +326,16 @@ async function atualizarFicha(config, instrucoes) {
     await fazerLogin(page);
     const fichaFrame = await abrirFicha(page, config.characterUrl);
 
+    try {
+      await garantirModoSimples(page, fichaFrame);
+    } catch {
+      // Se isso falhar, os campos que dependem do modo Simple (equipment,
+      // features_and_traits, other_proficiencies_and_languages) vao cair
+      // no aviso generico de "campo nao encontrado" mais abaixo, que ja
+      // explica que a ficha precisa estar em modo Simple — degrada sozinho
+      // pro comportamento de antes dessa automacao existir.
+    }
+
     const linhasDeArmaNecessarias = 1 + Math.max(-1, ...instrucoes.map((i) => (i.linhaArma ?? -1)));
     let criacaoDeLinhasFalhou = null;
     if (linhasDeArmaNecessarias > 0) {
@@ -176,6 +350,16 @@ async function atualizarFicha(config, instrucoes) {
       }
     }
 
+    // Le o estado real em vez de assumir um valor fixo: o checkbox
+    // "options-class-selection" preserva seu estado entre execucoes (a
+    // Roll20 guarda essa preferencia), entao supor que ele sempre comeca
+    // marcado faz o codigo desmarcar quando na verdade precisava marcar
+    // (e vice-versa) — bug real, ja aconteceu ao vivo.
+    const optionsClasseMarcadoInicial = await fichaFrame
+      .locator('input[name="attr_options-class-selection"]:visible')
+      .first()
+      .evaluate((el) => el.checked);
+    const estadoDaFicha = { aba: 'core', optionsClasseMarcado: optionsClasseMarcadoInicial };
     for (const instrucao of instrucoes) {
       if (criacaoDeLinhasFalhou && instrucao.linhaArma !== undefined) {
         pulados.push({
@@ -185,10 +369,43 @@ async function atualizarFicha(config, instrucoes) {
         continue;
       }
       try {
+        await ajustarEstadoDaFicha(page, fichaFrame, estadoDaFicha, instrucao);
         await escreverCampo(fichaFrame, instrucao);
         escritos.push(instrucao);
       } catch (erro) {
         pulados.push({ ...instrucao, motivo: erro.message });
+      }
+    }
+
+    // Testado ao vivo: campos de uma linha de arma que ficam com o
+    // "options-flag" da linha ainda desmarcado (modo edicao aberto) quando
+    // a pagina fecha as vezes NAO persistem no servidor, mesmo a leitura
+    // imediata apos o fill() confirmando o valor certo — o autosave dessa
+    // secao repetitiva parece precisar da linha ser recolhida de volta
+    // (checkbox marcado de novo) pra realmente disparar. Recolhe cada
+    // linha de arma usada antes de fechar a pagina, best-effort (uma
+    // falha aqui nao desfaz nada que ja foi escrito).
+    if (linhasDeArmaNecessarias > 0 && !criacaoDeLinhasFalhou) {
+      const todasAsLinhas = fichaFrame.locator(SELETOR_REPCONTAINER_ARMA).locator('.repitem');
+      const totalLinhas = await todasAsLinhas.count().catch(() => 0);
+      // Recolhe QUALQUER linha que tenha ficado aberta (nao so as que este
+      // programa tocou) — mais simples e mais robusto do que rastrear por
+      // indice ou nome, ja que a lista pode ter reordenado durante a
+      // execucao.
+      for (let i = 0; i < totalLinhas; i++) {
+        try {
+          const repitem = todasAsLinhas.nth(i);
+          const nomeCampo = repitem.locator('[name="attr_atkname"]:visible').first();
+          const tag = await nomeCampo.evaluate((el) => el.tagName);
+          if (tag === 'INPUT') {
+            await repitem.locator('input[name="attr_options-flag"]').first().evaluate((el) => el.click());
+            await new Promise((resolve) => setTimeout(resolve, 800));
+          }
+        } catch {
+          // best-effort: se nao der pra recolher, os campos ja escritos
+          // continuam valendo a tentativa, so corre o risco de nao
+          // persistir por causa desse detalhe especifico.
+        }
       }
     }
   } finally {

@@ -47,8 +47,14 @@ async function main() {
   const { atualizarFicha } = require('./src/roll20-updater');
 
   const config = loadConfig(path.resolve(args.config));
+  const inicio = Date.now();
+  console.log('Sincronizando... (isso pode levar 1-2 minutos, acompanhe a janela do Chrome)');
   const relatorio = await atualizarFicha(config, instrucoes);
+  const duracaoSegundos = ((Date.now() - inicio) / 1000).toFixed(1);
 
+  console.log('');
+  console.log('=== SINCRONIZACAO CONCLUIDA ===');
+  console.log(`Tempo: ${duracaoSegundos}s`);
   console.log(`Campos escritos: ${relatorio.escritos.length}`);
   console.log(`Campos pulados: ${relatorio.pulados.length}`);
   for (const pulado of relatorio.pulados) {

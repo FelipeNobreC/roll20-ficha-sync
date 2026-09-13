@@ -60,6 +60,7 @@ const CAMPOS_DIRETOS_TEXTO = [
   ['Background', 'background'],
   ['Alignment', 'alignment'],
   ['XP', 'experience'],
+  ['AC', 'ac'],
   ['Speed', 'speed'],
   ['HPMax', 'hp_max'],
   ['HPCurrent', 'hp'],
@@ -146,10 +147,16 @@ function buildMapping(pdfFields) {
   ARMAS.forEach((arma, linhaArma) => {
     const nome = pdfFields[arma.nome];
     if (!nome || !String(nome).trim()) return;
+    const nomeArma = String(nome);
 
-    instrucoes.push({ attr: 'atkname', tipo: 'text', valor: String(nome), linhaArma });
-    instrucoes.push({ attr: 'atkattr_base', tipo: 'select', valor: '0', linhaArma });
-    instrucoes.push({ attr: 'atkprofflag', tipo: 'checkbox', valor: false, linhaArma });
+    // nomeArma viaja junto com toda instrucao desta arma: a ordem das
+    // linhas na ficha do Roll20 pode mudar entre uma escrita e outra
+    // (secao repetivel reordena sozinha), entao localizar a linha pelo
+    // nome de verdade é mais confiável do que confiar so no indice
+    // posicional linhaArma — ver roll20-updater.js.
+    instrucoes.push({ attr: 'atkname', tipo: 'text', valor: nomeArma, linhaArma, nomeArma });
+    instrucoes.push({ attr: 'atkattr_base', tipo: 'select', valor: '0', linhaArma, nomeArma });
+    instrucoes.push({ attr: 'atkprofflag', tipo: 'checkbox', valor: false, linhaArma, nomeArma });
 
     if (pdfFields[arma.bonus]) {
       try {
@@ -158,6 +165,7 @@ function buildMapping(pdfFields) {
           tipo: 'text',
           valor: String(parseBonusAtaque(pdfFields[arma.bonus])),
           linhaArma,
+          nomeArma,
         });
       } catch {
         // Bonus de ataque em formato inesperado: pula so o atkmod desta arma.
@@ -167,10 +175,10 @@ function buildMapping(pdfFields) {
     if (pdfFields[arma.dano]) {
       try {
         const { dado, bonus, tipo } = parseDano(pdfFields[arma.dano]);
-        instrucoes.push({ attr: 'dmgbase', tipo: 'text', valor: dado, linhaArma });
-        instrucoes.push({ attr: 'dmgattr', tipo: 'select', valor: '0', linhaArma });
-        instrucoes.push({ attr: 'dmgmod', tipo: 'text', valor: String(bonus), linhaArma });
-        instrucoes.push({ attr: 'dmgtype', tipo: 'text', valor: tipo, linhaArma });
+        instrucoes.push({ attr: 'dmgbase', tipo: 'text', valor: dado, linhaArma, nomeArma });
+        instrucoes.push({ attr: 'dmgattr', tipo: 'select', valor: '0', linhaArma, nomeArma });
+        instrucoes.push({ attr: 'dmgmod', tipo: 'text', valor: String(bonus), linhaArma, nomeArma });
+        instrucoes.push({ attr: 'dmgtype', tipo: 'text', valor: tipo, linhaArma, nomeArma });
       } catch {
         // Dano em formato inesperado: pula so as 4 instrucoes de dano desta arma.
       }

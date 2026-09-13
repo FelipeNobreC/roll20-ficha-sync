@@ -21,6 +21,7 @@ test('mapeia atributos, classe e nivel do PDF de exemplo', async () => {
   assert.deepEqual(encontrar(instrucoes, 'class'), { attr: 'class', tipo: 'select', valor: 'Fighter' });
   assert.deepEqual(encontrar(instrucoes, 'base_level'), { attr: 'base_level', tipo: 'text', valor: '4' });
   assert.deepEqual(encontrar(instrucoes, 'subclass'), { attr: 'subclass', tipo: 'text', valor: 'Guarda de Brecha' });
+  assert.deepEqual(encontrar(instrucoes, 'ac'), { attr: 'ac', tipo: 'text', valor: '18' });
 });
 
 test('mapeia proficiencia de salvaguarda a partir dos checkboxes do PDF', async () => {
@@ -36,13 +37,13 @@ test('mapeia as 3 armas do PDF de exemplo para linhas de repeating_attack', asyn
   const campos = await readPdfFields(FIXTURE);
   const instrucoes = buildMapping(campos);
 
-  assert.deepEqual(encontrar(instrucoes, 'atkname', 0), { attr: 'atkname', tipo: 'text', valor: 'Espada longa', linhaArma: 0 });
-  assert.deepEqual(encontrar(instrucoes, 'atkmod', 0), { attr: 'atkmod', tipo: 'text', valor: '6', linhaArma: 0 });
-  assert.deepEqual(encontrar(instrucoes, 'dmgbase', 0), { attr: 'dmgbase', tipo: 'text', valor: '1d8', linhaArma: 0 });
-  assert.deepEqual(encontrar(instrucoes, 'dmgmod', 0), { attr: 'dmgmod', tipo: 'text', valor: '6', linhaArma: 0 });
-  assert.deepEqual(encontrar(instrucoes, 'dmgtype', 0), { attr: 'dmgtype', tipo: 'text', valor: 'Slashing', linhaArma: 0 });
+  assert.deepEqual(encontrar(instrucoes, 'atkname', 0), { attr: 'atkname', tipo: 'text', valor: 'Espada longa', linhaArma: 0, nomeArma: 'Espada longa' });
+  assert.deepEqual(encontrar(instrucoes, 'atkmod', 0), { attr: 'atkmod', tipo: 'text', valor: '6', linhaArma: 0, nomeArma: 'Espada longa' });
+  assert.deepEqual(encontrar(instrucoes, 'dmgbase', 0), { attr: 'dmgbase', tipo: 'text', valor: '1d8', linhaArma: 0, nomeArma: 'Espada longa' });
+  assert.deepEqual(encontrar(instrucoes, 'dmgmod', 0), { attr: 'dmgmod', tipo: 'text', valor: '6', linhaArma: 0, nomeArma: 'Espada longa' });
+  assert.deepEqual(encontrar(instrucoes, 'dmgtype', 0), { attr: 'dmgtype', tipo: 'text', valor: 'Slashing', linhaArma: 0, nomeArma: 'Espada longa' });
 
-  assert.deepEqual(encontrar(instrucoes, 'atkname', 2), { attr: 'atkname', tipo: 'text', valor: 'Estaca', linhaArma: 2 });
+  assert.deepEqual(encontrar(instrucoes, 'atkname', 2), { attr: 'atkname', tipo: 'text', valor: 'Estaca', linhaArma: 2, nomeArma: 'Estaca' });
 });
 
 test('mapeia proficiencia de pericia corrigindo o desalinhamento PT/EN do PDF', async () => {
