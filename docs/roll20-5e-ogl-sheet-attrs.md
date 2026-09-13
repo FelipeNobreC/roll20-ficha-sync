@@ -14,6 +14,58 @@ Confirmado que é a ficha certa porque:
   ficha de um jogo próprio da Roll20 chamado Redsky, não D&D — as duas
   foram descartadas depois de inspecionadas.)
 
+## Atualização (testado ao vivo contra uma conta Roll20 real)
+
+A Roll20 **redesenhou visualmente** essa ficha depois do commit consultado
+acima — o layout real (dashboard em cards, tabs PÚBLICO/MESTRE,
+BASE/BIO/MAGIAS) não se parece em nada com o HTML estático pesquisado.
+**Os nomes `attr_*` continuam os mesmos** (confirmado: `attr_character_name`,
+`attr_strength`, `attr_class`, os `*_prof` de perícia/salvaguarda, etc.
+todos bateram com dados reais do personagem), então a tabela abaixo
+continua válida para *quais* atributos usar — só a estrutura do DOM em volta
+deles mudou. Descobertas que mudam como `roll20-updater.js` precisa
+manipular o DOM:
+
+- **A ficha carrega dentro de um iframe específico**, não "o primeiro
+  iframe da página" (a página tem outros iframes: pixel do doubleclick,
+  widgets do Stripe). O iframe certo tem `src` contendo `legacy-sheets` e
+  `charsheettype=ogl5e` na query string.
+- **É uma SPA que demora ~10-15s pra montar o formulário** dentro do
+  iframe — esperar só o `<iframe>` existir no DOM não basta, é preciso
+  esperar um campo de verdade (ex. `attr_character_name`) aparecer.
+- **Cada campo tem até ~10 cópias no DOM ao mesmo tempo** (visões
+  público/mestre, abas base/bio/magias, etc.), a maioria escondida via
+  CSS. É obrigatório filtrar por `:visible` (`[name="attr_x"]:visible`) —
+  sem isso o Playwright pode escrever numa cópia escondida sem efeito, ou
+  falhar tentando editar um `<span>` de exibição em vez do `<input>` real.
+- **Escrever muitos campos em sequência sem pausa perde alguns autosaves**
+  — o campo aparenta preenchido no momento, mas o valor não persiste no
+  servidor (confirmado: o mesmo campo preenchido isoladamente, com uma
+  pausa depois, sempre persiste). `roll20-updater.js` agora espera ~250ms
+  depois de cada campo escrito.
+- **Atributos de habilidade (`attr_strength` etc.) têm uma armadilha**: a
+  instância `:visible` costuma ser `<span class="finalattr" name="attr_strength">`
+  (só exibição, não aceita `.fill()`) — o `<input>` editável de verdade
+  não foi localizado ainda. Provavelmente segue o mesmo padrão de
+  "clique pra expandir" descrito abaixo para armas.
+- **Vários campos de biografia** (`background`, `alignment`, `experience`,
+  `other_proficiencies_and_languages`, `age`/`height`/`weight`/`eyes`/
+  `skin`/`hair`, `allies_and_organizations`, `character_backstory`,
+  `treasure`) não foram encontrados no DOM na aba padrão ("BASE") — quase
+  certamente ficam atrás da aba "BIO" visível no topo da ficha. Clicar
+  nela programaticamente não funcionou de primeira (elemento é
+  interceptado por outra camada/overlay); não foi resolvido ainda.
+- **A seção de armas (`repeating_attack`) mudou de estrutura**: o HTML
+  estático usa `.repeating_attack .attack` e `.repeating_attack .repcontrol_add`,
+  mas o DOM real usa `.repcontainer[data-groupname="attack"] > .repitem >
+  .attack` (cadeia de pais confirmada:
+  `SPAN > BUTTON.btn > DIV.display > DIV.attack > DIV.repitem > DIV.repcontainer.ui-sortable`),
+  e o botão de adicionar não foi localizado. Além disso o campo
+  `attr_atkname` visível por padrão é um `<span>` de "modo exibição"
+  dentro de um `<button>` (não aceita `.fill()`) — a linha provavelmente
+  precisa ser expandida (clicar em algo) antes do `<input>` editável
+  aparecer. Não resolvido — armas continuam caindo em `pulados`.
+
 ## Campos raiz (não-repetíveis)
 
 | Roll20 `attr_*` | Tipo DOM | Observação |
